@@ -16,8 +16,8 @@ const Chart = ({ tempData }) => {
     const verticalChartContainer = d3.select(verticalSVGRef.current);
     const horizontalChartContainer = d3.select(horizontalSVGRef.current);
     const barsContainer = d3.select(barsSVGRef.current); // Contenedor de las barras
-    const barWidth = 30;
-    const paddingFactor = 2.2;
+    const barWidth = 20;
+    const paddingFactor = 1.5;
     const padding = 20;
     const responsiveDIVHeight = 300;
     const responsiveDIVWidth = tempData.length * barWidth * paddingFactor;
@@ -31,12 +31,13 @@ const Chart = ({ tempData }) => {
       .scaleBand()
       .rangeRound([0, responsiveDIVWidth])
       .padding(0.5)
-      .domain(tempData.map((d) => d.Type));
+      .domain(tempData.map((d) => d.Type))
+
 
     const y = d3
       .scaleLinear()
       .rangeRound([responsiveDIVHeight - padding, padding])
-      .domain([0, d3.max(tempData, (d) => d.Count + 10)]);
+      .domain([0, d3.max(tempData, (d) => d.ymax + 10)]);
 
     const xAxis = d3.axisBottom(x);
     const yAxis = d3.axisLeft(y);
@@ -50,7 +51,7 @@ const Chart = ({ tempData }) => {
 
     svgX
       .append("g")
-      .attr("class", "x axis")
+      .attr("class", "xAxis")
       .attr("transform", `translate(0, ${responsiveDIVHeight - padding})`)
       .call(xAxis)
       .selectAll("text")
@@ -64,11 +65,11 @@ const Chart = ({ tempData }) => {
     const svgBars = barsContainer
       .append("svg")
       .attr("width", responsiveDIVWidth)
-      .attr("height", responsiveDIVHeight)
-      .attr("transform", "translate(0, 0)")
-      .attr("transform", "scale(1, 1)");
+      .attr("height", responsiveDIVHeight - padding - 5)
+      .attr("transform", "translate(0, 0)");
+    // .attr("transform", "scale(1, 1)");
 
-    //metodo zoom
+    // metodo zoom
     //   const zoom = d3.zoom()
     //   .on("zoom", zoomed);
 
@@ -76,7 +77,7 @@ const Chart = ({ tempData }) => {
 
     // function zoomed({transform}) {
     //     svgBars.attr("transform", transform);
-    //     svgY.attr("transform", transform);
+    //     svgY.attr("transform", `translate(0,${transform.y})`);
 
     //     console.log(transform);
 
@@ -88,12 +89,12 @@ const Chart = ({ tempData }) => {
       .enter()
       .append("rect")
       .attr("class", "bar")
-      .attr("y", (d) => y(d.Count))
+      .attr("y", (d) => y(d.ymax))
       .attr("x", (d) => x(d.Type))
       .attr("width", barWidth)
-      .attr("height", (d) => responsiveDIVHeight - y(d.Count) - padding);
+      .attr("height", (d) => y(d.ymin) - y(d.ymax));
 
-    // svgBars.call(d3.drag().on("drag", draggedChart));
+    svgBars.call(d3.drag().on("drag", draggedChart));
 
     // Elemento SVG para el eje Y
     const svgY = verticalChartContainer
@@ -115,6 +116,7 @@ const Chart = ({ tempData }) => {
     //drag en chart
 
     function draggedChart(event) {
+      //para x
       const dx = event.dx;
 
       const currentTransform = parseFloat(
@@ -123,6 +125,15 @@ const Chart = ({ tempData }) => {
 
       const newTransform = currentTransform + dx;
 
+      //para y
+      const dy = event.dy;
+
+      const currentTransformY = parseFloat(
+        svgBars.attr("transform").split("(")[1].split(",")[1].split(")")[0]
+      );
+
+      const newTransformY = currentTransformY + dy;
+
       // Obtener el ancho del chart actual
       const chartContainer = d3.select(barsSVGRef.current);
       const containerWidth = chartContainer
@@ -130,10 +141,42 @@ const Chart = ({ tempData }) => {
         .getBoundingClientRect().width;
 
       //   Restringir drag si se pasa de los límites del chart
-      if (newTransform < 0 && Math.abs(newTransform) + 20 < containerWidth) {
+      // if (newTransform < 0 && Math.abs(newTransform) + 20 < containerWidth) {
+        // svgX.attr("transform", `translate(${newTransform}, 0)`);
         svgBars.attr("transform", `translate(${newTransform}, 0)`);
-        svgX.attr("transform", `translate(${newTransform}, 0)`);
-      }
+
+        //modificar el eje x
+        const currentDomainX = x.domain();
+
+        for (let i = 0; i < currentDomainX.length; i++) {
+          currentDomainX[i] = Math.round(currentDomainX[i] + dx/x.bandwidth());
+        }
+
+        x.domain(currentDomainX);
+        svgX.select(".xAxis").call(d3.axisBottom(x));
+
+        console.log(x.bandwidth());
+
+        // .domain(tempData.map((d) => d.Type));
+
+
+        //modificar el eje y
+        const currentDomain = y.domain();
+        y.domain([currentDomain[0] + dy / 2, currentDomain[1] + dy / 2]);
+        svgY.select(".yAxis").call(d3.axisLeft(y));
+
+        //recalcular svgBars, "no modificar su posicion"
+        svgBars
+          .selectAll(".bar")
+          .attr("y", (d) => y(d.ymax))
+          // .attr("x", (d) => x(d.Type))
+          .attr("width", barWidth)
+          .attr("height", (d) => y(d.ymin) - y(d.ymax));
+      // }
+
+
+
+
     }
 
     // Drag en eje X
@@ -183,13 +226,19 @@ const Chart = ({ tempData }) => {
       y.domain([currentDomain[0] + dy / 2, currentDomain[1] - dy / 2]);
       svgY.select(".yAxis").call(d3.axisLeft(y));
 
+      // svgBars
+      // .selectAll(".bar")
+      // .attr("y", (d) => y(d.Count))
+      // .attr("x", (d) => x(d.Type))
+      // .attr("width", barWidth)
+      // .attr("height", (d) =>  y(d.Count));
+
       svgBars
-      .selectAll(".bar")
-      .attr("y", (d) => y(d.Count))
-      .attr("x", (d) => x(d.Type))
-      .attr("width", barWidth)
-      .attr("height", (d) =>  y(d.Count));
-        
+        .selectAll(".bar")
+        .attr("y", (d) => y(d.ymax))
+        .attr("x", (d) => x(d.Type))
+        .attr("width", barWidth)
+        .attr("height", (d) => y(d.ymin) - y(d.ymax));
 
       //   const currentScaleY = parseFloat(
       //     svgBars.attr("transform").split("scale(1, ")[1].split(")")[0]
@@ -203,7 +252,7 @@ const Chart = ({ tempData }) => {
 
   return (
     <div className="chart">
-      <div id="yaxis" ref={verticalSVGRef} className="chart__yaxis"></div>
+      <div  ref={verticalSVGRef} className="chart__yaxis"></div>
       <div ref={horizontalSVGRef} className="chart__xaxis"></div>
       <div ref={barsSVGRef} className="chart__bars"></div>
     </div>
